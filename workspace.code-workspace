@@ -1,0 +1,30 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"main.h": "c",
+			"stm32l0xx_hal.h": "c",
+			"main.hpp": "c",
+			"usart.h": "c",
+			"stm32l0xx.h": "c",
+			"gpio.h": "c",
+			"shell_example_minimal.h": "c",
+			"stm32l0xx_hal_uart.h": "c",
+			"stm32l0xx_hal_def.h": "c",
+			"stm32l0xx_hal_conf.h": "c",
+			"adc.h": "c",
+			"stm32l0xx_ll_dma.h": "c",
+			"stm32l0xx_ll_exti.h": "c",
+			"stm32l0xx_ll_gpio.h": "c",
+			"stm32l0xx_ll_rcc.h": "c",
+			"stm32l0xx_ll_adc.h": "c",
+			"limits": "c",
+			"battery_tester.h": "c",
+			"stm32l0xx_it.h": "c"
+		}
+	}
+}
