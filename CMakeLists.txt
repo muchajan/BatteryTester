@@ -6,7 +6,7 @@ message("Entering ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt")
 # Core project settings
 #
 set(PROJ_PATH                       ${CMAKE_CURRENT_SOURCE_DIR})
-project(battery_tester)
+project(BatteryTester)
 enable_language(C CXX ASM)
 message("Build type: "              ${CMAKE_BUILD_TYPE})
 

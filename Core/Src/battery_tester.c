@@ -3,12 +3,14 @@
 #include "stm32l0xx_ll_adc.h"
 #include "ring_buffer.h"
 #include "stdlib.h"
+#include "stdio.h"
 #include "main.h"
 
 static const uint32_t RESISTOR_VALUE_mohm = 8100U; //9800U;
 static const uint32_t BATTERY_CUTOFF_mV = 1000U;
 
 static const uint32_t LOG_SAMPLE_PERIOD_ms = 30000U;
+static uint32_t m_startTime_ms = 0U;
 static uint32_t m_nextTick_ms = 0U;
 
 #define SAMPLE_BUFFER_SIZE 100U
@@ -19,7 +21,7 @@ static const uint8_t SANITIZE_BUFFER_ITERATIONS = 10U;
 static uint32_t sampleBufferIndex = 0U;
 static uint32_t batteryVoltageSampleBuffer[SAMPLE_BUFFER_SIZE];
 static uint32_t resistorVoltageSampleBuffer[SAMPLE_BUFFER_SIZE];
-static uint32_t batteryCapacity_uAh = 0U;
+static uint32_t totalBatteryCapacity_uAh = 0U;
 
 void Sample(void);
 void SanitizeBuffer(uint32_t* pBuffer, const uint16_t bufferSize);
@@ -27,15 +29,17 @@ void SanitizeBuffers(void);
 void GetMeasurements(uint32_t* batteryVoltage_mV, uint32_t* resistorVoltage_mV,
     uint32_t* batteryCurrent_uA);
 void LogMeasurement(uint32_t time_ms, uint32_t batteryVoltage_mV,
-    uint32_t resistorVoltage_mV, uint32_t batteryCurrent_uA, uint32_t batteryCapacity_uAh);
+    uint32_t resistorVoltage_mV, uint32_t batteryCurrent_uA,
+    uint32_t totalBatteryCapacity_uAh);
 void CalibrateADC(void);
+void FormatTime(uint32_t time_ms, uint8_t* pTimeString);
 
 uint8_t running = STOP;
 
 void BatteryTester_Init(void)
 {
     CalibrateADC();
-    batteryCapacity_uAh = 0;
+    totalBatteryCapacity_uAh = 0;
 }
 
 int8_t BatteryTester_Start(void)
@@ -46,7 +50,7 @@ int8_t BatteryTester_Start(void)
 
     if (running == RUN)
     {
-        Log_Print("Already running");
+        Log_Print((uint8_t*)"Already running");
         return -2;
     }
 
@@ -66,8 +70,8 @@ int8_t BatteryTester_Start(void)
     }
 
     Log_Print((uint8_t*)"Starting Battery Test\r\n");
-    Log_Print((uint8_t*)"Time [ms], Battery Voltage [mV], Resistor Voltage [ms],\
-     Resistor Current [uA]\r\n");
+    Log_Print((uint8_t*)"Time [ms], Battery Voltage [mV], Resistor Voltage [ms], "
+        "Resistor Current [nA], Overall capacity [uAh]\r\n");
 
     HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(SWITCH0_GPIO_Port, SWITCH0_Pin, GPIO_PIN_SET);
@@ -83,8 +87,11 @@ int8_t BatteryTester_Start(void)
 
     SanitizeBuffers();
     GetMeasurements(&batteryVoltage_mV, &resistorVoltage_mV, &batteryCurrent_uA);
-    LogMeasurement(HAL_GetTick(), batteryVoltage_mV, resistorVoltage_mV,
-        batteryCurrent_uA, batteryCapacity_uAh);
+
+    m_startTime_ms = HAL_GetTick();
+    m_nextTick_ms = m_startTime_ms + LOG_SAMPLE_PERIOD_ms;
+    LogMeasurement(0U, batteryVoltage_mV, resistorVoltage_mV,
+        batteryCurrent_uA, totalBatteryCapacity_uAh);
 
     running = RUN;
     return 0;
@@ -95,7 +102,7 @@ void BatteryTester_Stop(void)
     HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(SWITCH0_GPIO_Port, SWITCH0_Pin, GPIO_PIN_RESET);
 
-    Log_Print("Test finished\r\n");
+    Log_Print((uint8_t*)"Test finished\r\n");
     running = STOP;
 }
 
@@ -117,11 +124,13 @@ void BatteryTester_Task(void)
         uint32_t resistorVoltage_mV;
         uint32_t batteryCurrent_uA;
 
-        GetMeasurements(&batteryVoltage_mV, &resistorVoltage_mV, &batteryCurrent_uA);
+        GetMeasurements(&batteryVoltage_mV, &resistorVoltage_mV,
+            &batteryCurrent_uA);
 
-        batteryCapacity_uAh += batteryCurrent_uA / 120;
+        totalBatteryCapacity_uAh += batteryCurrent_uA / 120;
 
-        LogMeasurement(tick_ms, batteryVoltage_mV, resistorVoltage_mV, batteryCurrent_uA, batteryCapacity_uAh);
+        LogMeasurement((tick_ms - m_startTime_ms), batteryVoltage_mV,
+            resistorVoltage_mV, batteryCurrent_uA, totalBatteryCapacity_uAh);
 
         m_nextTick_ms = tick_ms + LOG_SAMPLE_PERIOD_ms;
 
@@ -152,9 +161,12 @@ void Sample(void)
     }
     uint32_t adc_vrefint_val = LL_ADC_REG_ReadConversionData32(ADC1);
 
-    uint32_t psuVoltage_mV = __LL_ADC_CALC_VREFANALOG_VOLTAGE(adc_vrefint_val, LL_ADC_RESOLUTION_12B);
-    uint32_t batteryVoltage_mV = __LL_ADC_CALC_DATA_TO_VOLTAGE(psuVoltage_mV, adc_chan0_val, LL_ADC_RESOLUTION_12B);
-    uint32_t resistorVoltage_mV = __LL_ADC_CALC_DATA_TO_VOLTAGE(psuVoltage_mV, adc_chan1_val, LL_ADC_RESOLUTION_12B);
+    uint32_t psuVoltage_mV =
+        __LL_ADC_CALC_VREFANALOG_VOLTAGE(adc_vrefint_val, LL_ADC_RESOLUTION_12B);
+    uint32_t batteryVoltage_mV =
+        __LL_ADC_CALC_DATA_TO_VOLTAGE(psuVoltage_mV, adc_chan0_val, LL_ADC_RESOLUTION_12B);
+    uint32_t resistorVoltage_mV =
+        __LL_ADC_CALC_DATA_TO_VOLTAGE(psuVoltage_mV, adc_chan1_val, LL_ADC_RESOLUTION_12B);
 
     batteryVoltageSampleBuffer[sampleBufferIndex] = batteryVoltage_mV;
     resistorVoltageSampleBuffer[sampleBufferIndex] = resistorVoltage_mV;
@@ -191,7 +203,8 @@ void GetMeasurements(uint32_t* batteryVoltage_mV, uint32_t* resistorVoltage_mV,
 }
 
 void LogMeasurement(uint32_t time_ms, uint32_t batteryVoltage_mV,
-    uint32_t resistorVoltage_mV, uint32_t batteryCurrent_uA, uint32_t batteryCapacity_uAh)
+    uint32_t resistorVoltage_mV, uint32_t batteryCurrent_uA,
+    uint32_t totalBatteryCapacity_uAh)
 {
     uint8_t timeString[12];
     uint8_t batteryVoltageString[11];
@@ -199,11 +212,11 @@ void LogMeasurement(uint32_t time_ms, uint32_t batteryVoltage_mV,
     uint8_t batteryCurrentString[11];
     uint8_t batteryCapacityString[11];
 
-    itoa(time_ms, (char*)timeString, 10);
+    FormatTime(time_ms, timeString);
     itoa(batteryVoltage_mV, (char*)batteryVoltageString, 10);
     itoa(resistorVoltage_mV, (char*)resistorVoltageString, 10);
     itoa(batteryCurrent_uA, (char*)batteryCurrentString, 10);
-    itoa(batteryCapacity_uAh, (char*)batteryCapacityString, 10);
+    itoa(totalBatteryCapacity_uAh, (char*)batteryCapacityString, 10);
 
     Log_Print(timeString);
     Log_Print((uint8_t*)&", ");
@@ -215,6 +228,16 @@ void LogMeasurement(uint32_t time_ms, uint32_t batteryVoltage_mV,
     Log_Print((uint8_t*)&", ");
     Log_Print(batteryCapacityString);
     Log_Print((uint8_t*)&"\r\n");
+}
+
+void FormatTime(uint32_t time_ms, uint8_t* pTimeString)
+{
+    uint32_t time_s = (time_ms / 1000U);
+    uint32_t seconds = time_s % 60U;
+    uint32_t minutes = (time_s / 60) % 60;
+    uint32_t hours = (time_s / (60 * 60)) % 60;
+
+    sprintf((char*)pTimeString, "%d:%02d:%02d", (int)hours, (int)minutes, (int)seconds);
 }
 
 void CalibrateADC(void)

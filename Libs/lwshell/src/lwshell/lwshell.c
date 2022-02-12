@@ -196,7 +196,7 @@ prv_parse_input(lwshell_t* lw) {
                 }
 #endif /* LWSHELL_CFG_USE_ENABLE_LIST_CMD */
             } else {
-                LW_OUTPUT(lw, "> Unknown command\r\n> ");
+                LW_OUTPUT(lw, "\r\nUnknown command\r\n> ");
             }
         }
     }

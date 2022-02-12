@@ -19,16 +19,23 @@ mycmd_fn(int32_t argc, char** argv) {
     return 0;
 }
 
+int32_t help(int32_t argc, char** argv)
+{
+    lwshell_usart_printer("\r\nCreature Battery Tester online (=^-ω-^=)\r\n", 0);
+    return lwshellOK;
+}
+
+
 int32_t shell_cmd_start(int32_t argc, char** argv)
 {
     BatteryTester_Start();
-    return 0;
+    return lwshellOK;
 }
 
 int32_t shell_cmd_stop(int32_t argc, char** argv)
 {
     BatteryTester_Stop();
-    return 0;
+    return lwshellOK;
 }
 
 UART_HandleTypeDef* m_phuart;
@@ -60,6 +67,7 @@ shell_example_minimal_init(UART_HandleTypeDef* phuart) {
 
     /* Define shell commands */
     // lwshell_register_cmd("mycmd", mycmd_fn, "Adds 2 integer numbers and prints them");
+    lwshell_register_cmd("help", help, "Help");
     lwshell_register_cmd("start", shell_cmd_start, "Start battery test");
     lwshell_register_cmd("stop", shell_cmd_stop, "Stop battery test");
 
