@@ -1,2 +1,1 @@
-This is a test commit.
-And another one.
+A tool to measure capacity of AA/AAA rechargable batteries.
